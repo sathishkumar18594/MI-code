@@ -1,2 +1,0 @@
-year,beginning_value,ending_value,annual_return,realized_pnl,unrealized_pnl,buy_value,sell_value,turnover,buy_transaction_costs,sell_transaction_costs,transaction_costs,trades,winning_trades,losing_trades,win_rate,profit_factor,max_drawdown
-2026,1000000,932726.2273575477,-0.06727377264245227,-8531.045191105988,-67178.89181530642,0.0,0.0,0.0,0,94.88082714579097,94.88082714579097,1,0,1,0.0,0.0,0.0

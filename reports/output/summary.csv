@@ -1,2 +1,0 @@
-strategy_name,benchmark_name,universe,portfolio_size,rebalance_frequency,market_filter,initial_capital,final_portfolio_value,absolute_return,cagr,xirr,max_drawdown,sharpe_ratio,sortino_ratio,calmar_ratio,total_trades,winning_trades,losing_trades,win_rate,profit_factor,average_holding_days,portfolio_turnover,total_transaction_costs
-Momentum V1,Nifty 500,Nifty 500,10,Monthly,Weekly Supertrend,1000000,932726.2273575477,-0.06727377264245227,-0.7196917537003865,0.0,0.0923462277855736,-5.820010744248251,0.0,0.0,0,0,0,0.3333333333333333,0.0,0.0,0.0,0.0
