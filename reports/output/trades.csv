@@ -1,0 +1,2 @@
+symbol,entry_date,entry_rank,exit_date,exit_rank,holding_days,quantity,entry_price,exit_price,cost_value,proceeds,gross_realized_pnl,brokerage,stt,exchange_charge,sebi_charge,gst,stamp_duty,total_transaction_cost,net_realized_pnl,return_pct,sell_reason
+J&KBANK,2026-07-10 00:00:00,8,2026-07-30 00:00:00,79,20,590.7344234583213,169.0800018310547,155.0,100000.0,91563.8356360398,-8436.164363960197,0.0,91.5638356360398,2.7194459183903823,0.0915638356360398,0.5059817557247559,0.0,94.88082714579097,-8531.045191105988,-0.08436164363960197,SellReason.RANK_EXIT
