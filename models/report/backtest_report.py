@@ -25,6 +25,7 @@ from models.report.metric_report import (
 from models.report.decision_report import (
     DecisionReport,
 )
+from models.report.stock_summary_report import StockSummaryReport
 
 
 @dataclass(slots=True)
@@ -69,6 +70,8 @@ class BacktestReport:
     ] = field(
         default_factory=list
     )
+
+    stock_summary: list[StockSummaryReport] = field(default_factory=list)
     
     monthly_return_matrix: list[MonthlyReturnMatrix] = field(
         default_factory=list

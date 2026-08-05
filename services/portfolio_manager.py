@@ -40,7 +40,6 @@ class PortfolioManager:
                 ),
             )
         )
-
         portfolio = context.config["portfolio"]
 
         self.initial_capital = (
@@ -62,6 +61,7 @@ class PortfolioManager:
         market_bullish: bool,
         rebalance_date,
         is_rebalance_day: bool = True,
+        entry_rankings=None,
     ) -> PortfolioState:
 
         # Ensure initial capital is set only for the first investment.
@@ -77,7 +77,7 @@ class PortfolioManager:
         if not state.invested:
             return self._handle_first_investment(
                 state,
-                rankings,
+                entry_rankings or rankings,
                 rebalance_date,
             )
 
@@ -86,6 +86,7 @@ class PortfolioManager:
             rankings,
             rebalance_date,
             is_rebalance_day,
+            entry_rankings or rankings,
         )
 
     def _handle_market_exit(
@@ -140,11 +141,13 @@ class PortfolioManager:
         rankings,
         rebalance_date,
         is_rebalance_day,
+        entry_rankings,
     ) -> PortfolioState:
         if is_rebalance_day:
             portfolio = self.rebalance_existing_portfolio(
                 state.portfolio,
                 rankings,
+                entry_rankings,
                 rebalance_date,
             )
         else:
@@ -503,6 +506,7 @@ class PortfolioManager:
         self,
         portfolio,
         rankings,
+        entry_rankings,
         rebalance_date,
     ):
         rank_lookup = {
@@ -552,7 +556,7 @@ class PortfolioManager:
                 available_cash,
                 total_buy_allocation,
             ) = self._fill_vacant_positions(
-                rankings,
+                entry_rankings,
                 kept_holdings,
                 held_symbols,
                 available_cash,

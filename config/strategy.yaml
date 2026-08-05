@@ -6,6 +6,11 @@ liquidity:
   average_daily_traded_value_window: 20
   min_average_daily_traded_value: 5000000  # ₹50 lakh
 
+circuit_filter:
+  enabled: true
+  lookback_days: 252
+  max_consecutive_hits: 5
+
 universe:
   name: NIFTY500
 

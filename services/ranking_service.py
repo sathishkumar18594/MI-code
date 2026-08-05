@@ -16,6 +16,7 @@ from services.scoring_service import (
 from services.liquidity_service import (
     LiquidityService,
 )
+from services.circuit_risk_service import CircuitRiskService
 
 
 class RankingService:
@@ -47,8 +48,10 @@ class RankingService:
                 context
             )
         )
+        self.circuit_risk_service = CircuitRiskService(context)
 
         self.cache = {}
+        self.entry_cache = {}
         self.dataframes = {}
     def _build_dataframe_cache(
         self,
@@ -64,6 +67,7 @@ class RankingService:
                 f"[LOAD] {symbol} rows={len(df)} last_date={df['Date'].max()}"
             )
             df = self.pipeline.execute(df)
+            df = self.circuit_risk_service.add_risk_columns(df)
             self.dataframes[symbol] = df
 
     def _collect_rows(
@@ -106,6 +110,7 @@ class RankingService:
                 )
 
                 df = self.pipeline.execute(df)
+                df = self.circuit_risk_service.add_risk_columns(df)
 
                 df = df[
                     df["Date"] <= trading_date
@@ -133,21 +138,21 @@ class RankingService:
     def _build_rankings(
         self,
         rows,
+        apply_circuit_filter=False,
     ) -> list[Ranking]:
         if not rows:
             return []
 
         universe = pd.DataFrame(rows)
 
-        universe = (
-            self.scoring_service.calculate(
-                universe
-            )
-        )
-
         universe = self.liquidity_service.filter(
             universe
         )
+
+        if apply_circuit_filter:
+            universe = self.circuit_risk_service.filter(universe)
+
+        universe = self.scoring_service.calculate(universe)
 
         universe = (
             universe
@@ -206,6 +211,7 @@ class RankingService:
         trading_dates: list[datetime],
     ):
         self.cache.clear()
+        self.entry_cache.clear()
         self._build_dataframe_cache(symbols)
         for trading_date in trading_dates:
             rows = self._collect_rows(
@@ -214,9 +220,16 @@ class RankingService:
                 use_dataframe_cache=True,
             )
             self.cache[trading_date] = self._build_rankings(rows)
+            self.entry_cache[trading_date] = self._build_rankings(
+                rows,
+                apply_circuit_filter=True,
+            )
 
     def get_rankings(
         self,
         trading_date: datetime,
     ) -> list[Ranking]:
         return self.cache.get(trading_date, [])
+
+    def get_entry_rankings(self, trading_date):
+        return self.entry_cache.get(trading_date, [])

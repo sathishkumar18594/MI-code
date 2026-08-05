@@ -160,6 +160,7 @@ class BacktestService:
                 trading_date
             )
         )
+        entry_rankings = self.ranking_service.get_entry_rankings(trading_date)
         state = (
             self.portfolio_manager.update(
                 state=state,
@@ -167,6 +168,7 @@ class BacktestService:
                 market_bullish=market_bullish,
                 rebalance_date=trading_date,
                 is_rebalance_day=is_rebalance_day,
+                entry_rankings=entry_rankings,
             )
         )
         state.portfolio.rebalance_date = (

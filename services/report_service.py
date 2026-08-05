@@ -16,33 +16,19 @@ class ReportService:
 
         matrix = {}
 
-        previous_value = None
-
+        grouped = {}
         for period in result.periods:
+            date = period.portfolio.rebalance_date
+            grouped.setdefault((date.year, date.month), []).append(period)
 
-            portfolio = period.portfolio
-            date = portfolio.rebalance_date
-            current_value = portfolio.total_value
-
-            year = date.year
-            month = date.strftime("%b")
-
+        for (year, month_number), periods in grouped.items():
             if year not in matrix:
                 matrix[year] = {m: None for m in months}
-
-            if previous_value is None or previous_value <= 0:
-                monthly_return = 0.0
-            else:
-                monthly_return = (
-                    (current_value - previous_value)
-                    / previous_value
-                )
-
-            matrix[year][month] = round(
-                monthly_return * 100,
-                2,
+            beginning = periods[0].performance.beginning_value
+            ending = periods[-1].performance.ending_value
+            monthly_return = (
+                (ending - beginning) / beginning if beginning else 0.0
             )
-
-            previous_value = current_value
+            matrix[year][months[month_number - 1]] = round(monthly_return * 100, 2)
 
         return matrix

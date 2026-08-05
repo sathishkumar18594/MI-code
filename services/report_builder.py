@@ -10,6 +10,7 @@ from models.report.transaction_cost_report import TransactionCostReport
 from models.report.metric_report import MetricReport
 from models.report.decision_report import DecisionReport
 from models.report.annual_report import AnnualReport
+from models.report.stock_summary_report import StockSummaryReport
 from application.app_context import AppContext
 
 
@@ -40,6 +41,7 @@ class ReportBuilder:
         report.transaction_costs = self._build_transaction_costs(result)
         report.metrics = self._build_metrics(result)
         report.decisions = self._build_decisions(result)
+        report.stock_summary = self._build_stock_summary(result)
         report.monthly_return_matrix = (
             self.report_service.build_monthly_return_matrix(
                 result
@@ -47,6 +49,65 @@ class ReportBuilder:
         )
 
         return report
+
+    def _build_stock_summary(self, result):
+        closed_trades = {}
+        for period in result.periods:
+            for trade in period.portfolio.trades:
+                closed_trades[(trade.symbol, trade.entry_date, trade.exit_date)] = trade
+
+        summaries = {}
+        for trade in closed_trades.values():
+            summary = summaries.setdefault(trade.symbol, self._empty_stock_summary(trade.symbol))
+            summary["closed_invested_amount"] += trade.cost_value
+            summary["realized_pnl"] += trade.net_realized_pnl
+            summary["total_transaction_cost"] += trade.total_charges
+            summary["closed_trades"] += 1
+            if trade.net_realized_pnl > 0:
+                summary["winning_trades"] += 1
+            elif trade.net_realized_pnl < 0:
+                summary["losing_trades"] += 1
+
+        if result.periods:
+            for holding in result.periods[-1].portfolio.holdings:
+                summary = summaries.setdefault(
+                    holding.symbol, self._empty_stock_summary(holding.symbol)
+                )
+                summary["open_invested_amount"] += holding.cost_value
+                summary["open_market_value"] += holding.market_value
+                summary["unrealized_pnl"] += holding.market_value - holding.cost_value
+
+        reports = []
+        for summary in summaries.values():
+            summary["total_invested_amount"] = (
+                summary["closed_invested_amount"] + summary["open_invested_amount"]
+            )
+            summary["total_pnl"] = summary["realized_pnl"] + summary["unrealized_pnl"]
+            summary["total_return_pct"] = (
+                summary["total_pnl"] / summary["total_invested_amount"]
+                if summary["total_invested_amount"] else 0.0
+            )
+            reports.append(StockSummaryReport(**summary))
+
+        return sorted(reports, key=lambda report: report.total_pnl, reverse=True)
+
+    @staticmethod
+    def _empty_stock_summary(symbol):
+        return {
+            "symbol": symbol,
+            "total_invested_amount": 0.0,
+            "closed_invested_amount": 0.0,
+            "open_invested_amount": 0.0,
+            "realized_pnl": 0.0,
+            "unrealized_pnl": 0.0,
+            "total_pnl": 0.0,
+            "total_return_pct": 0.0,
+            "closed_trades": 0,
+            "winning_trades": 0,
+            "losing_trades": 0,
+            "total_transaction_cost": 0.0,
+            "open_market_value": 0.0,
+        }
 
     def _build_summary(self, result):
 
@@ -114,8 +175,10 @@ class ReportBuilder:
 
         reports = []
 
+        # This file is the daily portfolio timeline used to audit rank exits.
+        # The separate monthly_return_matrix contains the compounded monthly
+        # performance figures.
         for period in result.periods:
-
             portfolio = period.portfolio
             performance = period.performance
 
@@ -145,6 +208,8 @@ class ReportBuilder:
 
         holdings = []
 
+        # Keep daily snapshots: rank exits can occur every trading day, while
+        # new positions are only filled on the monthly rebalance.
         for period in result.periods:
 
             for holding in period.portfolio.holdings:
@@ -290,15 +355,11 @@ class ReportBuilder:
 
             # Annual performance is the aggregation of period performance,
             # not a recomputation from the portfolio snapshots.
-            annual_realized_pnl = sum(
-                period.performance.period_realized_pnl
-                for period in periods
-            )
-
-            annual_unrealized_pnl = sum(
-                period.performance.period_unrealized_pnl
-                for period in periods
-            )
+            annual_realized_pnl = sum(trade.net_realized_pnl for trade in trades)
+            annual_unrealized_pnl = periods[-1].performance.unrealized_pnl
+            sell_value = sum(trade.proceeds for trade in trades)
+            sell_costs = sum(trade.total_charges for trade in trades)
+            returns = [period.performance.period_return for period in periods]
 
             reports.append(
                 AnnualReport(
@@ -308,22 +369,32 @@ class ReportBuilder:
                     annual_return=annual_return,
                     realized_pnl=annual_realized_pnl,
                     unrealized_pnl=annual_unrealized_pnl,
-                    buy_value=sum(p.portfolio.buy_value for p in periods),
-                    sell_value=sum(p.portfolio.sell_value for p in periods),
-                    turnover=sum(p.portfolio.turnover for p in periods),
-                    buy_transaction_costs=sum(p.portfolio.buy_transaction_costs for p in periods),
-                    sell_transaction_costs=sum(p.portfolio.sell_transaction_costs for p in periods),
-                    transaction_costs=sum(p.portfolio.transaction_costs for p in periods),
+                    buy_value=0.0,
+                    sell_value=sell_value,
+                    turnover=(sell_value / beginning_value if beginning_value else 0.0),
+                    buy_transaction_costs=0.0,
+                    sell_transaction_costs=sell_costs,
+                    transaction_costs=sell_costs,
                     trades=trade_count,
                     winning_trades=winning,
                     losing_trades=losing,
                     win_rate=(winning / trade_count if trade_count else 0.0),
                     profit_factor=(gross_profit / gross_loss if gross_loss > 0 else 0.0),
-                    max_drawdown=0.0,
+                    max_drawdown=self._max_drawdown(returns),
                 )
             )
 
         return reports
+
+    @staticmethod
+    def _max_drawdown(returns):
+        equity = peak = 1.0
+        drawdown = 0.0
+        for value in returns:
+            equity *= 1 + value
+            peak = max(peak, equity)
+            drawdown = min(drawdown, (equity - peak) / peak)
+        return abs(drawdown)
 
     def _build_transaction_costs(self, result):
 
@@ -474,4 +545,3 @@ class ReportBuilder:
                 )
 
         return decisions
-    

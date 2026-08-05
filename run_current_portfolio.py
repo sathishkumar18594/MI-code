@@ -49,9 +49,7 @@ def main():
         context.price_repository.latest_trading_date()
     )
 
-    trading_dates = [
-        latest_date
-    ]
+    trading_dates = [latest_date]
 
     ranking_service.build_cache(
         symbols=symbols,
@@ -81,6 +79,7 @@ def main():
     rankings = ranking_service.get_rankings(
         latest_date
     )
+    entry_rankings = ranking_service.get_entry_rankings(latest_date)
 
     state = portfolio_manager.update(
         state=state,
@@ -88,13 +87,14 @@ def main():
         market_bullish=market_bullish,
         rebalance_date=latest_date,
         is_rebalance_day=True,
+        entry_rankings=entry_rankings,
     )
 
     portfolio = state.portfolio
 
     ranking_report = ranking_report_builder.build(
         trading_date=latest_date,
-        rankings=rankings,
+        rankings=entry_rankings,
     )
 
     ranking_output_file = ranking_report_writer.write(
@@ -104,7 +104,7 @@ def main():
     report = report_builder.build(
         trading_date=latest_date,
         portfolio=portfolio,
-        rankings=rankings,
+        rankings=entry_rankings,
     )
 
     portfolio_output_file = (
