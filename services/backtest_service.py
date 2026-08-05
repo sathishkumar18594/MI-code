@@ -95,15 +95,23 @@ class BacktestService:
         previous_ending_value = (
             self.context.config["portfolio"]["initial_capital"]
         )
-        rebalance_dates_set = set(rebalance_dates)
+        rebalance_execution_dates = set()
+        trading_date_index = {
+            date: index for index, date in enumerate(trading_dates)
+        }
+        for signal_date in rebalance_dates:
+            index = trading_date_index.get(signal_date)
+            if index is not None and index + 1 < len(trading_dates):
+                rebalance_execution_dates.add(trading_dates[index + 1])
         self.ranking_service.build_cache(
             symbols=symbols,
             trading_dates=trading_dates,
         )
-        for index in range(len(trading_dates) - 1):
+        for index in range(1, len(trading_dates) - 1):
 
             trading_date = trading_dates[index]
             exit_date = trading_dates[index + 1]
+            signal_date = trading_dates[index - 1]
 
             state, period, previous_ending_value = (
                 self.execute_day(
@@ -111,7 +119,8 @@ class BacktestService:
                     trading_date=trading_date,
                     exit_date=exit_date,
                     previous_ending_value=previous_ending_value,
-                    is_rebalance_day=(trading_date in rebalance_dates_set),
+                    signal_date=signal_date,
+                    is_rebalance_day=(trading_date in rebalance_execution_dates),
                 )
             )
 
@@ -147,20 +156,21 @@ class BacktestService:
         exit_date,
         previous_ending_value,
         is_rebalance_day,
+        signal_date,
     ):
 
         market_bullish = (
             self.market_filter.is_bullish(
-                trading_date
+                signal_date
             )
         )
 
         rankings = (
             self.ranking_service.get_rankings(
-                trading_date
+                signal_date
             )
         )
-        entry_rankings = self.ranking_service.get_entry_rankings(trading_date)
+        entry_rankings = self.ranking_service.get_entry_rankings(signal_date)
         state = (
             self.portfolio_manager.update(
                 state=state,
@@ -222,6 +232,7 @@ class BacktestService:
         exit_date,
         previous_ending_value,
         is_rebalance_day,
+        signal_date=None,
     ):
         return self.execute_day(
             state=state,
@@ -229,4 +240,5 @@ class BacktestService:
             exit_date=exit_date,
             previous_ending_value=previous_ending_value,
             is_rebalance_day=is_rebalance_day,
+            signal_date=signal_date or trading_date,
         )
