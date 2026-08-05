@@ -140,3 +140,14 @@ class SignalCalendarService:
         ].copy()
         calendar = calendar.sort_values("Date")
         return calendar["Date"].tolist()
+
+    def next_trading_date(self, date):
+        calendar = self.repository.load(self.index_name).copy()
+        calendar["Date"] = pd.to_datetime(calendar["Date"])
+        future = calendar[calendar["Date"] > pd.Timestamp(date)]
+        if future.empty:
+            # The stored exchange calendar usually ends at the latest EOD
+            # update. Use the next business day for a pending live order;
+            # holiday handling is resolved by the exchange when it opens.
+            return pd.Timestamp(date) + pd.offsets.BDay(1)
+        return future.iloc[0]["Date"]

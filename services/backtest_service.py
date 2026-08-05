@@ -85,6 +85,7 @@ class BacktestService:
         symbols,
         trading_dates,
         rebalance_dates,
+        write_reports=True,
     ) -> BacktestResult:
 
         periods = []
@@ -137,15 +138,9 @@ class BacktestService:
             )
         )
 
-        report = (
-            self.report_builder.build(
-                result
-            )
-        )
-
-        self.csv_report_writer.write(
-            report
-        )
+        if write_reports:
+            report = self.report_builder.build(result)
+            self.csv_report_writer.write(report)
 
         return result
 
