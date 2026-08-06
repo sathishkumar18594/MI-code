@@ -88,6 +88,19 @@ class MarketDataService:
 
             return None
 
+        price_columns = ["Open", "High", "Low", "Close"]
+        invalid_prices = (df[price_columns] <= 0).any(axis=1)
+        if invalid_prices.any():
+            dropped = int(invalid_prices.sum())
+            logger.warning(
+                f"[CLEAN] Dropping {dropped} invalid OHLC rows for {symbol}"
+            )
+            df = df.loc[~invalid_prices].copy()
+
+        if df.empty:
+            logger.warning(f"[SKIP] No valid OHLC rows for {symbol}")
+            return None
+
         self.validator.validate(df)
 
         self.repository.save(

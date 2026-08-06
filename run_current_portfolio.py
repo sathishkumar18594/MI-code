@@ -66,14 +66,6 @@ def main():
         )
     )
 
-    if not market_bullish:
-        print(
-            f"Market is bearish on "
-            f"{latest_date.date()}. "
-            f"No portfolio generated."
-        )
-        return
-
     initial_signal_date = pd.Timestamp(
         context.config["live_tracking"]["initial_signal_date"]
     )
@@ -90,6 +82,100 @@ def main():
         latest_date
     )
     entry_rankings = ranking_service.get_entry_rankings(latest_date)
+
+    execution_date = calendar.next_trading_date(latest_date)
+    hedge = context.config.get("market_hedge", {})
+    hedge_enabled = hedge.get("enabled", False)
+    hedge_symbol = hedge.get("symbol", "GOLDBEES")
+    held_symbols = {holding.symbol for holding in portfolio.holdings}
+    actions = []
+
+    if not market_bullish:
+        # A bearish close is known only after EOD.  Schedule liquidation of
+        # stocks and the GoldBees hedge for the next trading session's open.
+        for holding in portfolio.holdings:
+            if holding.symbol != hedge_symbol:
+                actions.append([
+                    "SELL", holding.symbol, holding.rank,
+                    execution_date.date(), "Market trend bearish",
+                ])
+        if hedge_enabled and hedge_symbol not in held_symbols:
+            actions.append([
+                "BUY", hedge_symbol, 0,
+                execution_date.date(), "Market trend bearish hedge",
+            ])
+    else:
+        sell_rank = max(1, int(len(rankings) * 0.10))
+        rank_lookup = {
+            ranking.stock.symbol: ranking
+            for ranking in rankings
+        }
+        is_hedged = held_symbols == {hedge_symbol}
+
+        if is_hedged:
+            actions.append([
+                "SELL", hedge_symbol, 0,
+                execution_date.date(), "Market trend bullish",
+            ])
+
+        sells = set()
+        if not is_hedged:
+            for holding in portfolio.holdings:
+                ranking = rank_lookup.get(holding.symbol)
+                if ranking is None or ranking.rank > sell_rank:
+                    actions.append([
+                        "SELL", holding.symbol,
+                        ranking.rank if ranking else "Not ranked",
+                        execution_date.date(), "Rank exit",
+                    ])
+                    sells.add(holding.symbol)
+
+        held_after_sells = held_symbols - sells - {hedge_symbol}
+        signal_dates = set(calendar.signal_dates(latest_date, latest_date))
+        should_fill = (
+            is_hedged
+            or not held_symbols
+            or latest_date in signal_dates
+        )
+        if should_fill:
+            reason = (
+                "Market trend bullish"
+                if is_hedged
+                else "Initial portfolio"
+                if not held_symbols
+                else "Monthly replacement"
+            )
+            for ranking in entry_rankings:
+                if len(held_after_sells) >= context.config["strategy"]["portfolio_size"]:
+                    break
+                if ranking.stock.symbol in held_after_sells:
+                    continue
+                actions.append([
+                    "BUY", ranking.stock.symbol, ranking.rank,
+                    execution_date.date(), reason,
+                ])
+                held_after_sells.add(ranking.stock.symbol)
+
+    if not actions:
+        actions.append([
+            "HOLD", "-", "-", execution_date.date(),
+            "No scheduled changes",
+        ])
+
+    actions_file = Path("reports/output/current_actions.csv")
+    with actions_file.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow(["Action", "Symbol", "Rank", "Scheduled execution", "Reason"])
+        writer.writerows(actions)
+
+    if not market_bullish:
+        print()
+        print("=" * 60)
+        print(f"Market is bearish on {latest_date.date()}.")
+        print(f"Actions File  : {actions_file}")
+        print("=" * 60)
+        print()
+        return
 
     ranking_report = ranking_report_builder.build(
         trading_date=latest_date,
@@ -111,42 +197,6 @@ def main():
             report
         )
     )
-
-    execution_date = calendar.next_trading_date(latest_date)
-    sell_rank = max(1, int(len(rankings) * 0.10))
-    rank_lookup = {ranking.stock.symbol: ranking for ranking in rankings}
-    actions = []
-    for holding in portfolio.holdings:
-        ranking = rank_lookup.get(holding.symbol)
-        if ranking is None or ranking.rank > sell_rank:
-            actions.append([
-                "SELL", holding.symbol,
-                ranking.rank if ranking else "Not ranked",
-                execution_date.date(), "Rank exit",
-            ])
-
-    signal_dates = set(calendar.signal_dates(latest_date, latest_date))
-    if latest_date in signal_dates:
-        held_after_sells = {
-            holding.symbol for holding in portfolio.holdings
-            if holding.symbol not in {action[1] for action in actions}
-        }
-        for ranking in entry_rankings:
-            if len(held_after_sells) >= context.config["strategy"]["portfolio_size"]:
-                break
-            if ranking.stock.symbol in held_after_sells:
-                continue
-            actions.append([
-                "BUY", ranking.stock.symbol, ranking.rank,
-                execution_date.date(), "Monthly replacement",
-            ])
-            held_after_sells.add(ranking.stock.symbol)
-
-    actions_file = Path("reports/output/current_actions.csv")
-    with actions_file.open("w", newline="", encoding="utf-8") as file:
-        writer = csv.writer(file)
-        writer.writerow(["Action", "Symbol", "Rank", "Scheduled execution", "Reason"])
-        writer.writerows(actions)
 
     print()
     print("=" * 60)

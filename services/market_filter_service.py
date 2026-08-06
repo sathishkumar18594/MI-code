@@ -44,6 +44,7 @@ class MarketFilterService:
         df = self.repository.load(
             self.index_name
         )
+        self.latest_market_date = pd.Timestamp(df["Date"].max()).normalize()
 
         #
         # Convert timeframe only once
@@ -78,6 +79,19 @@ class MarketFilterService:
         completed = self.market_data[
             self.market_data["Date"] <= rebalance_date
         ]
+
+        # The final resampled weekly row is still in progress when the latest
+        # available daily session is before Friday.  It must not be used for a
+        # live decision; historical rows are already complete because later
+        # daily data exists.  A completed holiday-shortened historical week is
+        # retained with its actual final session date.
+        if (
+            self.timeframe == "WEEKLY"
+            and not completed.empty
+            and completed.iloc[-1]["Date"] == self.latest_market_date
+            and self.latest_market_date.dayofweek != 4
+        ):
+            completed = completed.iloc[:-1]
 
         if completed.empty:
 

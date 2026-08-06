@@ -25,3 +25,4 @@ class DataPipeline:
         self.market_data_service.update_all(
             universe
         )
+        self.market_data_service.update_symbol("GOLDBEES")

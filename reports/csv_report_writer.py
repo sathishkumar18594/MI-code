@@ -11,6 +11,12 @@ from models.report.metric_report import MetricReport
 from models.report.decision_report import DecisionReport
 from models.report.trade_report import TradeReport
 from models.report.stock_summary_report import StockSummaryReport
+from models.report.annual_asset_contribution_report import (
+    AnnualAssetContributionReport,
+)
+from models.report.asset_class_performance_report import (
+    AssetClassPerformanceReport,
+)
 
 from application.app_context import AppContext
 from models.report.backtest_report import (
@@ -86,6 +92,8 @@ class CsvReportWriter:
             report
         )
         self._write_stock_summary(report)
+        self._write_annual_asset_contribution(report)
+        self._write_asset_class_performance(report)
         self._write_monthly_return_matrix(
             report
         )
@@ -204,6 +212,20 @@ class CsvReportWriter:
             "stock_summary.csv",
             StockSummaryReport,
             report.stock_summary,
+        )
+
+    def _write_annual_asset_contribution(self, report: BacktestReport):
+        self._write_csv(
+            "annual_asset_contribution.csv",
+            AnnualAssetContributionReport,
+            report.annual_asset_contribution,
+        )
+
+    def _write_asset_class_performance(self, report: BacktestReport):
+        self._write_csv(
+            "asset_class_performance.csv",
+            AssetClassPerformanceReport,
+            report.asset_class_performance,
         )
 
     def _write_monthly_return_matrix(

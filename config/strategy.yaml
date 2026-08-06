@@ -5,6 +5,10 @@ strategy:
 live_tracking:
   initial_signal_date: 2026-07-09
 
+market_hedge:
+  enabled: true
+  symbol: GOLDBEES
+
 liquidity:
   average_daily_traded_value_window: 20
   min_average_daily_traded_value: 5000000  # ₹50 lakh

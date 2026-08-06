@@ -53,6 +53,9 @@ class PortfolioManager:
         self.accounting = (
             PortfolioAccountingService()
         )
+        hedge = context.config.get("market_hedge", {})
+        self.hedge_enabled = hedge.get("enabled", False)
+        self.hedge_symbol = hedge.get("symbol", "GOLDBEES")
 
     def update(
         self,
@@ -73,6 +76,10 @@ class PortfolioManager:
                 state,
                 rebalance_date,
             )
+
+        if self._is_hedge_portfolio(state.portfolio):
+            portfolio = self._liquidate_portfolio(state.portfolio, rebalance_date)
+            state = PortfolioState(portfolio=portfolio, invested=False, cash=portfolio.cash)
 
         if not state.invested:
             return self._handle_first_investment(
@@ -95,6 +102,9 @@ class PortfolioManager:
         rebalance_date,
     ) -> PortfolioState:
 
+        if self._is_hedge_portfolio(state.portfolio):
+            return state
+
         if state.portfolio is not None:
             portfolio = self._liquidate_portfolio(
                 state.portfolio,
@@ -110,11 +120,38 @@ class PortfolioManager:
                 is_invested=False,
             )
 
-        return PortfolioState(
-            portfolio=portfolio,
-            invested=False,
-            cash=portfolio.cash,
+        if self.hedge_enabled:
+            portfolio = self._build_hedge_portfolio(portfolio, rebalance_date)
+
+        return PortfolioState(portfolio=portfolio, invested=portfolio.is_invested, cash=portfolio.cash)
+
+    def _is_hedge_portfolio(self, portfolio):
+        return bool(
+            self.hedge_enabled
+            and portfolio is not None
+            and portfolio.holdings
+            and all(holding.symbol == self.hedge_symbol for holding in portfolio.holdings)
         )
+
+    def _build_hedge_portfolio(self, portfolio, rebalance_date):
+        execution = self.execution.execution_price(self.hedge_symbol, rebalance_date)
+        allocation = portfolio.cash
+        charges = self.transaction_cost.calculate_buy(allocation)
+        market_value = max(0.0, allocation - charges.total)
+        holding = PortfolioPosition(
+            symbol=self.hedge_symbol,
+            entry_date=execution.date,
+            entry_rank=0,
+            entry_price=execution.price,
+            quantity=market_value / execution.price if execution.price else 0.0,
+            current_price=execution.price,
+            weight=1.0,
+            rank=0,
+            score=0.0,
+            cost_value=allocation,
+            market_value=market_value,
+        )
+        return self._build_portfolio(portfolio, rebalance_date, [holding], 0.0)
     
     def _handle_first_investment(
         self,
@@ -127,6 +164,7 @@ class PortfolioManager:
             rankings,
             rebalance_date,
             capital=state.cash,
+            previous_portfolio=state.portfolio,
         )
 
         return PortfolioState(
@@ -433,6 +471,7 @@ class PortfolioManager:
         rankings,
         rebalance_date,
         capital,
+        previous_portfolio=None,
     ):
         selected = rankings[: self.portfolio_size]
         if not selected:
@@ -485,7 +524,7 @@ class PortfolioManager:
                 )
             )
         self._update_weights(holdings)
-        portfolio = Portfolio(
+        portfolio = previous_portfolio or Portfolio(
             rebalance_date=rebalance_date,
             holdings=[],
             initial_capital=capital,

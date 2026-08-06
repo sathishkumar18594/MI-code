@@ -26,6 +26,12 @@ from models.report.decision_report import (
     DecisionReport,
 )
 from models.report.stock_summary_report import StockSummaryReport
+from models.report.annual_asset_contribution_report import (
+    AnnualAssetContributionReport,
+)
+from models.report.asset_class_performance_report import (
+    AssetClassPerformanceReport,
+)
 
 
 @dataclass(slots=True)
@@ -72,6 +78,14 @@ class BacktestReport:
     )
 
     stock_summary: list[StockSummaryReport] = field(default_factory=list)
+
+    annual_asset_contribution: list[AnnualAssetContributionReport] = field(
+        default_factory=list
+    )
+
+    asset_class_performance: list[AssetClassPerformanceReport] = field(
+        default_factory=list
+    )
     
     monthly_return_matrix: list[MonthlyReturnMatrix] = field(
         default_factory=list

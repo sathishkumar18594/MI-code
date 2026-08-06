@@ -28,35 +28,40 @@ class TimeframeConverter:
 
         result = result.set_index("Date")
 
-        #
-        # Preserve the first trading day of each week
-        #
-        result["WeekStart"] = result.index
+        # Keep the existing monthly timestamp convention.  Weekly candles use
+        # their actual last trading session, which can be earlier than Friday
+        # in a holiday-shortened week.
+        if timeframe == "MONTHLY":
+            result["PeriodStart"] = result.index
+        else:
+            result["PeriodEnd"] = result.index
 
+        aggregations = {
+            "Open": "first",
+            "High": "max",
+            "Low": "min",
+            "Close": "last",
+            "Volume": "sum",
+        }
+        if timeframe == "MONTHLY":
+            aggregations["PeriodStart"] = "first"
+        else:
+            aggregations["PeriodEnd"] = "last"
         result = (
             result
             .resample(cls._RESAMPLE_RULES[timeframe])
-            .agg(
-                {
-                    "Open": "first",
-                    "High": "max",
-                    "Low": "min",
-                    "Close": "last",
-                    "Volume": "sum",
-                    "WeekStart": "first",
-                }
-            )
+            .agg(aggregations)
             .dropna()
             .reset_index()
         )
 
-        #
-        # Match TradingView labels
-        #
-        result["Date"] = result["WeekStart"]
+        if timeframe == "MONTHLY":
+            result["Date"] = result.pop("PeriodStart")
+        else:
+            result["Date"] = result.pop("PeriodEnd")
 
-        result = result.drop(
-            columns=["WeekStart"]
-        )
+        # A weekly signal is dated at the actual final session used in its
+        # OHLC data.  This prevents Monday look-ahead and supports weeks that
+        # end before Friday because of exchange holidays.
 
         return result

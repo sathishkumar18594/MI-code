@@ -50,6 +50,7 @@ class PerformanceService:
             valuation_portfolio,
             exit_signal_date,
             self.execution,
+            use_close=True,
         )
 
         self.accounting.rebuild(

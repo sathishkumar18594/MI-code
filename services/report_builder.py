@@ -11,6 +11,12 @@ from models.report.metric_report import MetricReport
 from models.report.decision_report import DecisionReport
 from models.report.annual_report import AnnualReport
 from models.report.stock_summary_report import StockSummaryReport
+from models.report.annual_asset_contribution_report import (
+    AnnualAssetContributionReport,
+)
+from models.report.asset_class_performance_report import (
+    AssetClassPerformanceReport,
+)
 from application.app_context import AppContext
 
 
@@ -42,6 +48,12 @@ class ReportBuilder:
         report.metrics = self._build_metrics(result)
         report.decisions = self._build_decisions(result)
         report.stock_summary = self._build_stock_summary(result)
+        report.annual_asset_contribution = (
+            self._build_annual_asset_contribution(result)
+        )
+        report.asset_class_performance = (
+            self._build_asset_class_performance(result)
+        )
         report.monthly_return_matrix = (
             self.report_service.build_monthly_return_matrix(
                 result
@@ -49,6 +61,115 @@ class ReportBuilder:
         )
 
         return report
+
+    def _build_annual_asset_contribution(self, result):
+        """Attribute each daily portfolio P&L to its closing regime.
+
+        A regime is Stocks when any equity is held, Gold when the portfolio is
+        fully invested in the configured hedge, and Cash otherwise.  This is
+        deliberately based on the same close-to-close daily valuation used by
+        the backtest reports.
+        """
+        hedge_symbol = self.config.get("market_hedge", {}).get(
+            "symbol", "GOLDBEES"
+        )
+        annual = {}
+
+        for period in result.periods:
+            portfolio = period.portfolio
+            year = portfolio.rebalance_date.year
+            row = annual.setdefault(
+                year,
+                {
+                    "year": year,
+                    "stock_days": 0,
+                    "gold_days": 0,
+                    "cash_days": 0,
+                    "stock_pnl": 0.0,
+                    "gold_pnl": 0.0,
+                    "cash_pnl": 0.0,
+                },
+            )
+            symbols = {holding.symbol for holding in portfolio.holdings}
+            daily_pnl = (
+                period.performance.ending_value
+                - period.performance.beginning_value
+            )
+
+            if symbols and symbols == {hedge_symbol}:
+                row["gold_days"] += 1
+                row["gold_pnl"] += daily_pnl
+            elif symbols:
+                row["stock_days"] += 1
+                row["stock_pnl"] += daily_pnl
+            else:
+                row["cash_days"] += 1
+                row["cash_pnl"] += daily_pnl
+
+        reports = []
+        for row in annual.values():
+            total_pnl = (
+                row["stock_pnl"]
+                + row["gold_pnl"]
+                + row["cash_pnl"]
+            )
+            reports.append(
+                AnnualAssetContributionReport(
+                    **row,
+                    total_pnl=total_pnl,
+                    stock_pnl_share=(
+                        row["stock_pnl"] / total_pnl if total_pnl else 0.0
+                    ),
+                    gold_pnl_share=(
+                        row["gold_pnl"] / total_pnl if total_pnl else 0.0
+                    ),
+                    cash_pnl_share=(
+                        row["cash_pnl"] / total_pnl if total_pnl else 0.0
+                    ),
+                )
+            )
+
+        return sorted(reports, key=lambda report: report.year)
+
+    def _build_asset_class_performance(self, result):
+        """Return conditional performance for stocks, gold, and the whole strategy."""
+        hedge_symbol = self.config.get("market_hedge", {}).get(
+            "symbol", "GOLDBEES"
+        )
+        returns = {"Stocks": [], "GOLDBEES": [], "Combined": []}
+
+        for period in result.periods:
+            daily_return = period.performance.period_return
+            returns["Combined"].append(daily_return)
+            symbols = {holding.symbol for holding in period.portfolio.holdings}
+            if symbols == {hedge_symbol}:
+                returns["GOLDBEES"].append(daily_return)
+            elif symbols:
+                returns["Stocks"].append(daily_return)
+
+        reports = []
+        for asset_class, daily_returns in returns.items():
+            active_days = len(daily_returns)
+            growth = 1.0
+            for daily_return in daily_returns:
+                growth *= 1.0 + daily_return
+            total_return = growth - 1.0
+            active_years = active_days / 252
+            cagr = (
+                growth ** (1.0 / active_years) - 1.0
+                if active_years and growth > 0 else 0.0
+            )
+            reports.append(
+                AssetClassPerformanceReport(
+                    asset_class=asset_class,
+                    active_trading_days=active_days,
+                    active_years=active_years,
+                    total_return=total_return,
+                    cagr=cagr,
+                )
+            )
+
+        return reports
 
     def _build_stock_summary(self, result):
         closed_trades = {}
@@ -357,7 +478,12 @@ class ReportBuilder:
             # not a recomputation from the portfolio snapshots.
             annual_realized_pnl = sum(trade.net_realized_pnl for trade in trades)
             annual_unrealized_pnl = periods[-1].performance.unrealized_pnl
+            buy_value = sum(trade.cost_value for trade in trades)
             sell_value = sum(trade.proceeds for trade in trades)
+            buy_costs = sum(
+                max(0.0, trade.cost_value - trade.quantity * trade.entry_price)
+                for trade in trades
+            )
             sell_costs = sum(trade.total_charges for trade in trades)
             returns = [period.performance.period_return for period in periods]
 
@@ -369,12 +495,15 @@ class ReportBuilder:
                     annual_return=annual_return,
                     realized_pnl=annual_realized_pnl,
                     unrealized_pnl=annual_unrealized_pnl,
-                    buy_value=0.0,
+                    buy_value=buy_value,
                     sell_value=sell_value,
-                    turnover=(sell_value / beginning_value if beginning_value else 0.0),
-                    buy_transaction_costs=0.0,
+                    turnover=(
+                        (buy_value + sell_value) / beginning_value
+                        if beginning_value else 0.0
+                    ),
+                    buy_transaction_costs=buy_costs,
                     sell_transaction_costs=sell_costs,
-                    transaction_costs=sell_costs,
+                    transaction_costs=buy_costs + sell_costs,
                     trades=trade_count,
                     winning_trades=winning,
                     losing_trades=losing,

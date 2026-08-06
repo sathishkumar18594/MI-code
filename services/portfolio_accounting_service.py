@@ -8,13 +8,20 @@ class PortfolioAccountingService:
         portfolio: Portfolio,
         valuation_date,
         execution_service,
+        use_close=False,
     ):
 
         for holding in portfolio.holdings:
-            execution = execution_service.execution_price(
-                symbol=holding.symbol,
-                signal_date=valuation_date,
-            )
+            if use_close:
+                execution = execution_service.closing_price(
+                    symbol=holding.symbol,
+                    signal_date=valuation_date,
+                )
+            else:
+                execution = execution_service.execution_price(
+                    symbol=holding.symbol,
+                    signal_date=valuation_date,
+                )
 
             holding.current_price = execution.price
             holding.market_value = (

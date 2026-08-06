@@ -145,6 +145,17 @@ class MetricsService:
         metrics.median_holding_days = statistics.median(holding_days) if holding_days else 0.0
         metrics.total_buy_value = sum(trade.cost_value for trade in trades)
         metrics.total_sell_value = sum(trade.proceeds for trade in trades)
+        open_holdings = last_period.portfolio.holdings
+        metrics.total_buy_value += sum(
+            holding.cost_value for holding in open_holdings
+        )
+        metrics.total_buy_transaction_costs = sum(
+            max(0.0, trade.cost_value - trade.quantity * trade.entry_price)
+            for trade in trades
+        ) + sum(
+            max(0.0, holding.cost_value - holding.quantity * holding.entry_price)
+            for holding in open_holdings
+        )
         metrics.portfolio_turnover = (
             (metrics.total_buy_value + metrics.total_sell_value)
             / metrics.initial_capital if metrics.initial_capital else 0.0
@@ -152,7 +163,10 @@ class MetricsService:
         metrics.total_sell_transaction_costs = sum(
             trade.total_charges for trade in trades
         )
-        metrics.total_transaction_costs = metrics.total_sell_transaction_costs
+        metrics.total_transaction_costs = (
+            metrics.total_buy_transaction_costs
+            + metrics.total_sell_transaction_costs
+        )
         metrics.transaction_cost_drag = (
             metrics.total_transaction_costs / metrics.initial_capital
             if metrics.initial_capital else 0.0

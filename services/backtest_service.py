@@ -108,17 +108,16 @@ class BacktestService:
             symbols=symbols,
             trading_dates=trading_dates,
         )
-        for index in range(1, len(trading_dates) - 1):
+        for index in range(1, len(trading_dates)):
 
             trading_date = trading_dates[index]
-            exit_date = trading_dates[index + 1]
             signal_date = trading_dates[index - 1]
 
             state, period, previous_ending_value = (
                 self.execute_day(
                     state=state,
                     trading_date=trading_date,
-                    exit_date=exit_date,
+                    exit_date=trading_date,
                     previous_ending_value=previous_ending_value,
                     signal_date=signal_date,
                     is_rebalance_day=(trading_date in rebalance_execution_dates),
@@ -179,9 +178,21 @@ class BacktestService:
         state.portfolio.rebalance_date = (
             trading_date
         )
-        # Preserve the entry snapshot and attach the exit valuation for reporting.
+        # Daily reports are end-of-day snapshots.  Trading still happens at
+        # the open; only the reporting valuation is marked to that session's
+        # close.
         period_portfolio = deepcopy(
             state.portfolio
+        )
+        self.performance_service.accounting.mark_to_market(
+            period_portfolio,
+            trading_date,
+            self.performance_service.execution,
+            use_close=True,
+        )
+        self.performance_service.accounting.rebuild(
+            period_portfolio,
+            self.portfolio_manager.portfolio_size,
         )
 
         performance = (
@@ -191,16 +202,6 @@ class BacktestService:
                 entry_signal_date=trading_date,
                 exit_signal_date=exit_date,
             )
-        )
-        period_portfolio.invested_value = (
-            performance.ending_value
-            - period_portfolio.cash
-        )
-        period_portfolio.total_value = (
-            performance.ending_value
-        )
-        period_portfolio.unrealized_pnl = (
-            performance.unrealized_pnl
         )
         period_portfolio.realized_pnl = (
             performance.realized_pnl
