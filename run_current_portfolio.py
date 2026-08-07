@@ -13,6 +13,7 @@ from reports.current_portfolio_report_writer import CurrentPortfolioReportWriter
 from services.portfolio_manager import PortfolioManager
 from models.portfolio_state import PortfolioState
 from services.backtest_service import BacktestService
+from services.report_builder import ReportBuilder
 
 
 def main():
@@ -78,6 +79,52 @@ def main():
     )
     portfolio = replay.periods[-1].portfolio
 
+    # Preserve the complete action ledger from the configured live portfolio
+    # start date.  current_actions.csv remains the small, forward-looking
+    # order sheet for the next trading session.
+    action_history = ReportBuilder(context)._build_decisions(replay)
+    signal_date_by_execution_date = {
+        pd.Timestamp(tracking_dates[index]).normalize(): (
+            pd.Timestamp(tracking_dates[index - 1]).normalize()
+        )
+        for index in range(1, len(tracking_dates))
+    }
+    action_history.sort(
+        key=lambda decision: (
+            signal_date_by_execution_date.get(
+                pd.Timestamp(decision.decision_date).normalize(),
+                pd.Timestamp(decision.decision_date).normalize(),
+            ),
+            decision.action,
+            decision.symbol,
+        )
+    )
+    action_history_file = Path("reports/output/current_action_history.csv")
+    with action_history_file.open("w", newline="", encoding="utf-8") as file:
+        writer = csv.writer(file)
+        writer.writerow([
+            "Action date", "Scheduled execution", "Action", "Symbol", "Reason", "Rank", "Score",
+        ])
+        for decision in action_history:
+            execution_date = pd.Timestamp(decision.decision_date).normalize()
+            action_date = signal_date_by_execution_date.get(
+                execution_date,
+                execution_date,
+            )
+            writer.writerow([
+                action_date,
+                execution_date,
+                decision.action,
+                decision.symbol,
+                decision.reason,
+                (
+                    decision.rank_after
+                    if decision.rank_after is not None
+                    else decision.rank_before
+                ),
+                decision.score,
+            ])
+
     rankings = ranking_service.get_rankings(
         latest_date
     )
@@ -91,8 +138,8 @@ def main():
     actions = []
 
     if not market_bullish:
-        # A bearish close is known only after EOD.  Schedule liquidation of
-        # stocks and the GoldBees hedge for the next trading session's open.
+        # A bearish close is known only after EOD.  Schedule the stock exit and
+        # GOLDBEES hedge for the next trading session's open.
         for holding in portfolio.holdings:
             if holding.symbol != hedge_symbol:
                 actions.append([
@@ -173,6 +220,7 @@ def main():
         print("=" * 60)
         print(f"Market is bearish on {latest_date.date()}.")
         print(f"Actions File  : {actions_file}")
+        print(f"Action History: {action_history_file}")
         print("=" * 60)
         print()
         return
@@ -205,6 +253,7 @@ def main():
     print(f"Rankings File : {ranking_output_file}")
     print(f"Portfolio File: {portfolio_output_file}")
     print(f"Actions File  : {actions_file}")
+    print(f"Action History: {action_history_file}")
     print("=" * 60)
     print()
 

@@ -21,12 +21,12 @@ symbols = universe.get_universe(
 )
 
 signal_dates = calendar.signal_dates(
-    start_date=datetime(2016, 4, 1),
+    start_date=datetime(2024, 1, 1),
     end_date=datetime.today(),
 )
 
 trading_dates = calendar.trading_dates(
-    start_date=datetime(2016, 4, 1),
+    start_date=datetime(2024, 1, 1),
     end_date=datetime.today(),
 )
 

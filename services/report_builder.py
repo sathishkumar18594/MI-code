@@ -662,10 +662,10 @@ class ReportBuilder:
                         weight_after=holding.weight,
                         quantity=holding.quantity,
                         entry_price=holding.entry_price,
-                        trade_value=holding.market_value,
+                        trade_value=holding.cost_value,
                         transaction_cost=(
                             holding.cost_value
-                            - holding.market_value
+                            - (holding.quantity * holding.entry_price)
                         ),
                         portfolio_value=portfolio.total_value,
                         cash_after=portfolio.cash,
