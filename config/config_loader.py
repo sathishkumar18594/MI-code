@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 import yaml
 
@@ -12,9 +13,11 @@ class ConfigLoader:
 
         if cls._config is None:
 
-            config_file = (
-                Path(__file__).parent
-                / "strategy.yaml"
+            config_file = Path(
+                os.environ.get(
+                    "STRATEGY_CONFIG",
+                    Path(__file__).parent / "strategy.yaml",
+                )
             )
 
             with open(

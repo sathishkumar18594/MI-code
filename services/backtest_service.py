@@ -29,6 +29,7 @@ from services.portfolio_manager import (
 from services.ranking_service import (
     RankingService,
 )
+from services.universe_service import UniverseService
 from application.app_context import AppContext
 
 
@@ -104,9 +105,34 @@ class BacktestService:
             index = trading_date_index.get(signal_date)
             if index is not None and index + 1 < len(trading_dates):
                 rebalance_execution_dates.add(trading_dates[index + 1])
+        universe_service = UniverseService()
+        universe_name = self.context.config["universe"]["name"].lower()
+        history_file = (
+            universe_service.history_folder / f"{universe_name}_history.csv"
+        )
+        try:
+            symbols_by_date = {
+                date: universe_service.get_universe_as_of(universe_name, date)
+                for date in trading_dates
+            }
+            cache_symbols = universe_service.history_symbols(
+                universe_name,
+                trading_dates[0],
+                trading_dates[-1],
+            )
+        except ValueError:
+            # A malformed or incomplete imported ledger must not quietly turn
+            # a historical backtest into a present-day-universe backtest.
+            if history_file.exists():
+                raise
+            # Retain current behavior until a historical ledger is imported.
+            symbols_by_date = None
+            cache_symbols = symbols
+
         self.ranking_service.build_cache(
-            symbols=symbols,
+            symbols=cache_symbols,
             trading_dates=trading_dates,
+            symbols_by_date=symbols_by_date,
         )
         for index in range(1, len(trading_dates)):
 

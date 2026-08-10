@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 import pandas as pd
 import csv
 from pathlib import Path
@@ -12,6 +13,7 @@ from services.current_ranking_report_builder import CurrentRankingReportBuilder
 from reports.current_portfolio_report_writer import CurrentPortfolioReportWriter
 from services.portfolio_manager import PortfolioManager
 from models.portfolio_state import PortfolioState
+from models.portfolio import Portfolio
 from services.backtest_service import BacktestService
 from services.report_builder import ReportBuilder
 
@@ -46,12 +48,18 @@ def main():
         "universe"
     ]["name"]
 
-    symbols = universe.get_universe(
-        universe_name.lower()
+    requested_date = os.getenv("CURRENT_PORTFOLIO_DATE")
+    latest_date = (
+        pd.Timestamp(requested_date).normalize()
+        if requested_date
+        else context.price_repository.latest_trading_date()
     )
 
-    latest_date = (
-        context.price_repository.latest_trading_date()
+    # Live selection always uses the latest published constituent list.  The
+    # backtest separately uses date-specific historical constituents; only
+    # the strategy rules, not the underlying data snapshot, are shared.
+    symbols = universe.get_universe(
+        universe_name.lower()
     )
 
     trading_dates = [latest_date]
@@ -77,7 +85,17 @@ def main():
         rebalance_dates=calendar.signal_dates(initial_signal_date, latest_date),
         write_reports=False,
     )
-    portfolio = replay.periods[-1].portfolio
+    portfolio = (
+        replay.periods[-1].portfolio
+        if replay.periods
+        else Portfolio(
+            rebalance_date=latest_date,
+            initial_capital=context.config["portfolio"]["initial_capital"],
+            cash=context.config["portfolio"]["initial_capital"],
+            available_cash=context.config["portfolio"]["initial_capital"],
+            total_value=context.config["portfolio"]["initial_capital"],
+        )
+    )
 
     # Preserve the complete action ledger from the configured live portfolio
     # start date.  current_actions.csv remains the small, forward-looking

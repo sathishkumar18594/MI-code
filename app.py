@@ -5,6 +5,7 @@ from services.universe_service import UniverseService
 from services.validation_service import ValidationService
 from pipelines.data_pipeline import DataPipeline
 from services.index_service import IndexService
+from config.config_loader import ConfigLoader
 
 provider = YahooProvider()
 
@@ -40,11 +41,5 @@ pipeline = DataPipeline(
     index_service=index_service
 )
 
-# ==========================================================
-# Select Universe
-# ==========================================================
-
-UNIVERSE = "nifty500"
-# UNIVERSE = "midcap250"
-
-pipeline.run(UNIVERSE)
+universe_name = ConfigLoader.get("universe", "name")
+pipeline.run(universe_name)

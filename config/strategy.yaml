@@ -6,12 +6,17 @@ live_tracking:
   initial_signal_date: 2026-07-09
 
 market_hedge:
-  enabled: true
+  enabled: false
   symbol: GOLDBEES
 
 liquidity:
   average_daily_traded_value_window: 20
   min_average_daily_traded_value: 5000000  # ₹50 lakh
+
+market_cap_filter:
+  enabled: true
+  min_market_cap_crore: 10000
+  data_file: data/market_cap/yearly_market_cap_all_nse.csv
 
 circuit_filter:
   enabled: true

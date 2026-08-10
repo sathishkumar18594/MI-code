@@ -100,3 +100,4 @@ class MarketFilterService:
         return bool(
             completed.iloc[-1]["trend"] == 1
         )
+

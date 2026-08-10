@@ -1,4 +1,5 @@
 from datetime import datetime
+import os
 
 from bootstrap import Bootstrap
 from services.universe_service import UniverseService
@@ -20,14 +21,21 @@ symbols = universe.get_universe(
     universe_name.lower()
 )
 
+start_date = datetime.fromisoformat(
+    os.getenv("BACKTEST_START_DATE", "2016-01-01")
+)
+end_date = datetime.fromisoformat(
+    os.getenv("BACKTEST_END_DATE", datetime.today().date().isoformat())
+)
+
 signal_dates = calendar.signal_dates(
-    start_date=datetime(2024, 1, 1),
-    end_date=datetime.today(),
+    start_date=start_date,
+    end_date=end_date,
 )
 
 trading_dates = calendar.trading_dates(
-    start_date=datetime(2024, 1, 1),
-    end_date=datetime.today(),
+    start_date=start_date,
+    end_date=end_date,
 )
 
 result = backtest.run(

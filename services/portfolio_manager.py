@@ -1,3 +1,5 @@
+import pandas as pd
+
 from application.app_context import AppContext
 
 from models.trade import Trade
@@ -67,6 +69,13 @@ class PortfolioManager:
         entry_rankings=None,
     ) -> PortfolioState:
 
+        # An empty entry list means every stock failed an entry screen (for
+        # example lower-circuit or liquidity).  Only fall back when the caller
+        # did not supply screened rankings at all.
+        screened_entry_rankings = (
+            rankings if entry_rankings is None else entry_rankings
+        )
+
         # Ensure initial capital is set only for the first investment.
         if state.portfolio is None:
             state.cash = self.initial_capital
@@ -84,7 +93,7 @@ class PortfolioManager:
         if not state.invested:
             return self._handle_first_investment(
                 state,
-                entry_rankings or rankings,
+                screened_entry_rankings,
                 rebalance_date,
             )
 
@@ -93,7 +102,7 @@ class PortfolioManager:
             rankings,
             rebalance_date,
             is_rebalance_day,
-            entry_rankings or rankings,
+            screened_entry_rankings,
         )
 
     def _handle_market_exit(
@@ -252,6 +261,17 @@ class PortfolioManager:
             period_realized_pnl,
         )
     
+    def _apply_corporate_actions(self, position, rebalance_date):
+        """Convert holdings at verified share-exchange corporate actions."""
+        if (
+            position.symbol == "JBCHEPHARM"
+            and rebalance_date >= pd.Timestamp("2026-07-17")
+        ):
+            # 100 J.B. Chemicals shares convert to 51 Torrent Pharma shares.
+            position.symbol = "TORNTPHARM"
+            position.quantity *= 0.51
+            position.entry_price /= 0.51
+
     def _mark_to_market(self, position, rebalance_date):
         execution = self.execution.execution_price(
             position.symbol,
@@ -657,6 +677,7 @@ class PortfolioManager:
         total_sell_proceeds = 0.0
         period_realized_pnl = 0.0
         for position in portfolio.holdings:
+            self._apply_corporate_actions(position, rebalance_date)
             self._mark_to_market(position, rebalance_date)
             ranking = rank_lookup.get(position.symbol)
             if ranking is None or ranking.rank > sell_rank:

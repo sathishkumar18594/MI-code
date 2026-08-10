@@ -256,11 +256,12 @@ class ReportBuilder:
         metrics = result.metrics
 
         strategy = self.config["strategy"]
+        universe_name = self.config["universe"]["name"]
 
         return SummaryReport(
             strategy_name=strategy.get("name", "Momentum V1"),
-            benchmark_name=strategy.get("benchmark", "Nifty 500"),
-            universe=strategy.get("universe", "Nifty 500"),
+            benchmark_name=strategy.get("benchmark", universe_name),
+            universe=strategy.get("universe", universe_name),
             portfolio_size=strategy.get(
                 "portfolio_size",
                 len(first_portfolio.holdings),

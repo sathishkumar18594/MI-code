@@ -60,6 +60,7 @@ class CurrentRankingReportWriter:
             "Symbol",
             "Score",
             "Avg Daily Traded Value",
+            "Market Cap (Rs. Crore)",
         ]
 
         headers.extend(
@@ -97,6 +98,10 @@ class CurrentRankingReportWriter:
                 ranking.stock.average_daily_traded_value,
                 0,
             ),
+            self._format(
+                ranking.factor_values.get("market_cap_crore"),
+                2,
+            ),
         ]
 
         for factor_name in report.enabled_factors:
@@ -110,4 +115,6 @@ class CurrentRankingReportWriter:
         return row
 
     def _format(self, value, digits=2):
+        if value is None:
+            return ""
         return round(value, digits)
