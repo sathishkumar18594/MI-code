@@ -107,9 +107,7 @@ class BacktestService:
                 rebalance_execution_dates.add(trading_dates[index + 1])
         universe_service = UniverseService()
         universe_name = self.context.config["universe"]["name"].lower()
-        history_file = (
-            universe_service.history_folder / f"{universe_name}_history.csv"
-        )
+        history_file = universe_service.history_file(universe_name)
         try:
             symbols_by_date = {
                 date: universe_service.get_universe_as_of(universe_name, date)

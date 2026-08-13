@@ -287,6 +287,23 @@ class UniverseService:
             symbols.update(symbol.strip() for symbol in value.split(",") if symbol.strip())
         return sorted(symbols)
 
+    def history_file(self, universe_name: str) -> Path:
+        """Resolve the authoritative imported ledger for a universe.
+
+        An explicitly named official ledger takes precedence over the legacy
+        generic ledger. Snapshot files captured by refresh() are layered on
+        top separately by ``_history_snapshots``.
+        """
+        normalized = universe_name.lower()
+        files = {file.name.lower(): file for file in self.history_folder.glob("*.csv")}
+        official = files.get(f"{normalized}_official_history.csv")
+        if official is not None:
+            return official
+        return files.get(
+            f"{normalized}_history.csv",
+            self.history_folder / f"{normalized}_history.csv",
+        )
+
     def build_sector_history_from_parent(
         self,
         sector_universe: str,
@@ -330,12 +347,9 @@ class UniverseService:
     def _history_snapshots(self, universe_name: str) -> pd.DataFrame:
         snapshots = []
         normalized = universe_name.lower()
-        # Universe labels are display-oriented (often uppercase) while older
-        # ledgers use lowercase filenames.  Match without changing semantics.
-        for imported in self.history_folder.glob("*_history.csv"):
-            stem = imported.name.removesuffix("_history.csv").lower()
-            if stem == normalized:
-                snapshots.append(pd.read_csv(imported, parse_dates=["effective_date"]))
+        imported = self.history_file(normalized)
+        if imported.exists():
+            snapshots.append(pd.read_csv(imported, parse_dates=["effective_date"]))
 
         # Snapshots captured by refresh() extend the imported ledger going
         # forward without overwriting its historical effective dates.
